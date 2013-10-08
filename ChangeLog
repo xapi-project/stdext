@@ -1,3 +1,6 @@
+0.9.2 (8-Oct-2013):
+* Remove Tar module (superceded by ocaml-tar)
+
 0.9.1 (10-Sep-2013):
 * Add Unixext.domain_of_addr
 * Add String.sub_{before,after}
