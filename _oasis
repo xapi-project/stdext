@@ -1,6 +1,6 @@
 OASISFormat:  0.3
 Name:         stdext
-Version:      0.9.1
+Version:      0.9.2
 Synopsis:     Standard extension library
 License:      LGPL-2.1 with OCaml linking exception
 Authors:      various
@@ -10,7 +10,7 @@ Plugins:      DevFiles (0.3), META (0.3)
 
 Library stdext
   Path: lib
-  Modules: Arrayext, Backtrace, Base64, Bigbuffer, Config, Date, Either, Encodings, ExtentlistSet, Filenameext, Fring, Fun, Hashtblext, Int64ext, LazyList, Listext, Mapext, Monad, Opt, Pervasiveext, Qring, Range, Ring, Stringext, Tar, Threadext, Trie, Unixext, VIO, Zerocheck
+  Modules: Arrayext, Backtrace, Base64, Bigbuffer, Config, Date, Either, Encodings, ExtentlistSet, Filenameext, Fring, Fun, Hashtblext, Int64ext, LazyList, Listext, Mapext, Monad, Opt, Pervasiveext, Qring, Range, Ring, Stringext, Threadext, Trie, Unixext, VIO, Zerocheck
   CSources: unixext_open_stubs.c, unixext_stubs.c, unixext_write_stubs.c, zerocheck_stub.c
   BuildDepends: threads, uuidm, unix, fd-send-recv, bigarray
 
