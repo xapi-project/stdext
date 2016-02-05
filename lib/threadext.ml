@@ -341,6 +341,116 @@ let thread_iter f xs = match thread_iter_all_exns f xs with
   | [] -> ()
   | (_, e) :: _ -> raise e
 
+module Semaphore = struct
+  let global_max   = ref 32   (* global maximum number of threads for all semaphores *)
+  let global_n     = ref 0    (* global current number of threads for all semaphores *)
+  let m = Mutex.create()      (* locking primitive to update current number of threads *)
+
+  let create max = if max < 1 then raise (Invalid_argument "max<1") else
+  (
+    max    , (* maximum number of parallel functions allowed for this semaphore only*)
+    ref 0  , (* number n of currently used resources in this semaphore only *)
+    ref []   (* fs to run later in this semaphore only when resources are available *)
+  )
+
+  exception SemaphoreException
+
+  (* Execute a list of function fs in parallel, up to max threads or global_max threads,
+     whatever is reached first.
+     - execute returns only after all fs finished or an exception was raised by one f in fs.
+     - if an exception occurs in one of f in fs, do not process further fs.
+     - if threads are released by other concurrent instances of execute, then attempt to
+       increase number of threads up to max.
+   *)
+  let execute (max, n, fs_todo) fs =
+    let error = ref None in
+    let results = Array.make (List.length fs) None in
+    let next_f () = Mutex.execute m (fun ()->
+      if !error <> None then None (*on error, don't process any more fs*)
+      else match !fs_todo with |[]->None |f::fs_later -> fs_todo := fs_later; Some f
+    ) in
+    let try_with_spare_global_thread f =
+      Mutex.lock m;
+      if (!n >= max || !global_n >= !global_max)
+        then (Mutex.unlock m; None)
+        else (
+          (* there's local and global space for a new thread *)
+          global_n := !global_n + 1; n := !n + 1;
+          let stats = (!n, !global_n) in
+          Mutex.unlock m;
+          try
+            let thread = Thread.create (fun ()->
+              Pervasiveext.finally
+                (fun ()->f stats) (*run next available f in a spare global thread*)
+                (fun ()->(* finally, take resource back after the end of f*)
+                  Mutex.execute m (fun ()->global_n := !global_n - 1; n := !n - 1)
+                )
+              ) ()
+            in Some thread
+          with _->(*thread create failed, take resource back *)
+            Mutex.execute m (fun ()->global_n := !global_n - 1; n := !n - 1);
+            None
+        )
+    in
+    let run (i,f) stats =
+      let r = try `Value (f stats)  (* attempt to run f, with some statistical info *)
+        with e-> ((*when f fails, we set !error so no more fs should be processed*)
+          Mutex.execute m (fun ()-> error := Some e);
+          `Exception e
+        )
+      in (* store the result for this f *)
+      Mutex.execute m (fun ()->Array.set results i (Some r));
+    in
+    let rec threads_of_fs ~can_create_thread known_threads stats =
+      (* go to the next f until no more fs_todo *)
+      match next_f() with
+        | None-> known_threads
+        | Some (i,f) -> if can_create_thread
+             (* only create threads from the main thread, in order to
+                have a single place that knows about all the threads
+              *)
+             then (match (try_with_spare_global_thread (fun stats->run (i,f) stats; ignore(threads_of_fs ~can_create_thread:false known_threads stats))) with
+                    |None-> run (i,f) stats; threads_of_fs ~can_create_thread known_threads stats
+                    |Some t-> threads_of_fs ~can_create_thread (known_threads @ [t]) stats
+                  )
+             else (run (i,f) stats; threads_of_fs ~can_create_thread known_threads stats)
+    in
+    (* this main thread will also run fs so it counts towards using resources *)
+    let stats = Mutex.execute m (fun ()-> n := !n + 1; global_n := !global_n + 1; (!n, !global_n)) in
+    let threads = Pervasiveext.finally
+      (fun ()->
+        Mutex.execute m (fun ()->fs_todo := !fs_todo @ (List.mapi (fun i f -> (i,f)) fs));
+        threads_of_fs ~can_create_thread:true [] stats
+      )
+      (fun ()->
+        (* finally, this thread will not run fs anymore *)
+        Mutex.execute m (fun ()->n := !n - 1; global_n := !global_n - 1);
+      )
+    in
+    (* wait child threads before collecting the results *)
+    List.iter (fun t->Thread.join t) threads;
+    (* Return results in the same order as the functions in fs, or
+       an exception if any occurred *)
+    Array.to_list results |> List.map (function
+      |Some (`Value r) -> r
+      |Some (`Exception e) -> raise e
+      |None -> (match !error with
+         |Some e->raise e
+         |None->(* assert: if there was a non-evaluated f, then !error should have been set *)
+            raise SemaphoreException
+         )
+      )
+end
+
+(** Parallel List.map with up to n operations in parallel *)
+let thread_n_map ?size f xs =
+  let xs_len = List.length xs in
+  let size = match size with None->xs_len| Some x->if x<1 then 1 else x in
+  let sem = Semaphore.create size in
+  Semaphore.execute sem (List.map (fun x-> fun stats -> f x stats) xs)
+
+let thread_n_iter ?size f xs = ignore (thread_n_map ?size f xs)
+
 module Delay = struct
   (* Concrete type is the ends of a pipe *)
   type t = { 
