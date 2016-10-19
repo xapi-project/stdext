@@ -20,29 +20,35 @@ type semaphore = {
 
 let create n =
   if n <= 0 then
-    failwith (Printf.sprintf 
-                "Negative semaphore count value (%d) on semaphore creation" n);
+    invalid_arg (Printf.sprintf 
+                   "Semaphore value must be positive, got %d" n);
   let m = Mutex.create ()
   and c = Condition.create () in
   { n; m; c; }
 
+exception Inconsistent_state of string
+let inconsistent_state string = raise (Inconsistent_state string)
+
 let acquire s k =
   if k <= 0 then
-    failwith (Printf.sprintf "Negative weight (%d) on semaphore acquisition" k);
+    invalid_arg (Printf.sprintf 
+                   "Semaphore acquisition requires a positive value, got %d" k);
   Mutex.lock s.m;
   while s.n < k do
     Condition.wait s.c s.m;
   done;
   if not (s.n >= k) then
-    failwith (Printf.sprintf 
-                "Invalid semaphore count (%d) after acquisition for (%d)" s.n k);
+    inconsistent_state (
+      Printf.sprintf 
+        "Semaphore value cannot be smaller than %d, got %d" k s.n);
   s.n <- s.n - k;
   Condition.signal s.c;
   Mutex.unlock s.m
 
 let release s k =
   if k <= 0 then
-    failwith (Printf.sprintf "Negative weight (%d) on semaphore release" k);
+    invalid_arg (Printf.sprintf 
+                   "Semaphore release requires a positive value, got %d" k);
   Mutex.lock s.m;
   s.n <- s.n + k;
   Condition.signal s.c;
