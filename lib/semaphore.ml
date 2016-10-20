@@ -12,7 +12,7 @@
  * GNU Lesser General Public License for more details.
  *)
 
-type semaphore = {
+type t = {
   mutable n : int;
   m : Mutex.t;
   c : Condition.t;
@@ -27,7 +27,8 @@ let create n =
   { n; m; c; }
 
 exception Inconsistent_state of string
-let inconsistent_state string = raise (Inconsistent_state string)
+let inconsistent_state fmt = Printf.kprintf (fun msg ->
+    raise (Inconsistent_state msg)) fmt
 
 let acquire s k =
   if k <= 0 then
@@ -38,9 +39,7 @@ let acquire s k =
     Condition.wait s.c s.m;
   done;
   if not (s.n >= k) then
-    inconsistent_state (
-      Printf.sprintf 
-        "Semaphore value cannot be smaller than %d, got %d" k s.n);
+    inconsistent_state "Semaphore value cannot be smaller than %d, got %d" k s.n;
   s.n <- s.n - k;
   Condition.signal s.c;
   Mutex.unlock s.m
