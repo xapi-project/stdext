@@ -557,7 +557,15 @@ let double_fork f =
 	| pid -> ignore(Unix.waitpid [] pid)
 
 external set_tcp_nodelay : Unix.file_descr -> bool -> unit = "stub_unixext_set_tcp_nodelay"
-external set_sock_keepalives : Unix.file_descr -> int -> int -> int -> unit = "stub_unixext_set_sock_keepalives"
+
+external _set_sock_keepalives : Unix.file_descr -> int -> int -> int -> unit = "stub_unixext_set_sock_keepalives"
+let set_sock_keepalives ?(count=5) ?(idle=30) ?(interval=2) fd =
+    let open Unix in
+    if (fstat fd).st_kind = S_SOCK then begin
+        setsockopt fd SO_KEEPALIVE true;
+        _set_sock_keepalives fd count idle interval
+    end
+
 external fsync : Unix.file_descr -> unit = "stub_unixext_fsync"
 external blkgetsize64 : Unix.file_descr -> int64 = "stub_unixext_blkgetsize64"
 
