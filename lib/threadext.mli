@@ -76,6 +76,18 @@ module Thread_loop :
 val thread_iter_all_exns: ('a -> unit) -> 'a list -> ('a * exn) list
 val thread_iter: ('a -> unit) -> 'a list -> unit
 
+module Semaphore :
+  sig
+    val global_max : int ref
+    val create : int -> int * int ref * 'a list ref
+    exception SemaphoreException
+    val execute :
+      int * int ref * (int * (int * int -> 'a)) list ref ->
+      (int * int -> 'a) list -> 'a list
+  end
+val thread_n_map : ?size:int -> ('a -> int * int -> 'b) -> 'a list -> 'b list
+val thread_n_iter : ?size:int -> ('a -> int * int -> 'b) -> 'a list -> unit
+
 module Delay :
   sig
     type t
