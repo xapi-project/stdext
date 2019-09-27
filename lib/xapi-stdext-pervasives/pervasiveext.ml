@@ -36,6 +36,24 @@ let finally fct clean_f =
   clean_f ();
   result
 
+let finally_with_exception fct clean_f =
+  let result =
+    try
+      fct ();
+    with exn ->
+      Backtrace.is_important exn;
+      begin
+        (* We catch and log exceptions raised by clean_f to avoid shadowing
+           the original exception raised by fct *)
+        try
+          clean_f (Some exn);
+        with cleanup_exn ->
+          Logs.warn ~src (fun m -> m "finally_with_exception: Error while running cleanup after failure of main function: %s" (Printexc.to_string cleanup_exn));
+      end;
+      raise exn in
+  clean_f None;
+  result
+
 (* Those should go into the Opt module: *)
 
 let maybe_with_default d f v =

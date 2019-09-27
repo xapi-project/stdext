@@ -16,6 +16,8 @@ val finally : (unit -> 'a) -> (unit -> unit) -> 'a
 (** [finally f g] returns [f ()] guaranteeing to run clean-up actions
     [g ()] even if [f ()] throws an exception. *)
 
+val finally_with_exception : (unit -> 'a) -> (exn option -> unit) -> 'a
+
 val maybe_with_default : 'b -> ('a -> 'b) -> 'a option -> 'b
 val may : ('a -> 'b) -> 'a option -> 'b option
 val default : 'a -> 'a option -> 'a
