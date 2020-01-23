@@ -208,4 +208,9 @@ sig
 	(** range lower upper = [lower; lower + 1; ...; upper - 1]
 	    Returns the empty list if lower >= upper. *)
 	val range : int -> int -> int list
+
+	val assoc_opt : 'a -> ('a * 'b) list -> 'b option
+
+	val find_opt : ('a -> bool) -> 'a list -> 'a option
+
 end

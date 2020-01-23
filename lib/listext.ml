@@ -229,4 +229,12 @@ let range lower =
 		else aux (upper-1::accu) (upper-1) in
 	aux []
 
+let rec assoc_opt x = function
+| [] -> None
+| (a,b)::l -> if compare a x = 0 then Some b else assoc_opt x l
+
+let rec find_opt p = function
+| [] -> None
+| x :: l -> if p x then Some x else find_opt p l
+
 end
