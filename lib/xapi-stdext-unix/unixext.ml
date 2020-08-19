@@ -387,39 +387,6 @@ let string_of_signal x =
   then List.assoc x table
   else (Printf.sprintf "(ocaml signal %d with an unknown name)" x)
 
-let proxy (a: Unix.file_descr) (b: Unix.file_descr) =
-  let size = 64 * 1024 in
-  (* [a'] is read from [a] and will be written to [b] *)
-  (* [b'] is read from [b] and will be written to [a] *)
-  let a' = CBuf.empty size and b' = CBuf.empty size in
-  Unix.set_nonblock a;
-  Unix.set_nonblock b;
-
-  try
-    while true do
-      let r = (if CBuf.should_read a' then [ a ] else []) @ (if CBuf.should_read b' then [ b ] else []) in
-      let w = (if CBuf.should_write a' then [ b ] else []) @ (if CBuf.should_write b' then [ a ] else []) in
-
-      (* If we can't make any progress (because fds have been closed), then stop *)
-      if r = [] && w = [] then raise End_of_file;
-
-      let r, w, _ = Unix.select r w [] (-1.0) in
-      (* Do the writing before the reading *)
-      List.iter (fun fd -> if a = fd then CBuf.write b' a else CBuf.write a' b) w;
-      List.iter (fun fd -> if a = fd then CBuf.read a' a else CBuf.read b' b) r;
-      (* If there's nothing else to read or write then signal the other end *)
-      List.iter
-        (fun (buf, fd) ->
-           if CBuf.end_of_reads buf then Unix.shutdown fd Unix.SHUTDOWN_SEND;
-           if CBuf.end_of_writes buf then Unix.shutdown fd Unix.SHUTDOWN_RECEIVE
-        ) [ a', b; b', a ]
-    done
-  with _ ->
-    (try Unix.clear_nonblock a with _ -> ());
-    (try Unix.clear_nonblock b with _ -> ());
-    (try Unix.close a with _ -> ());
-    (try Unix.close b with _ -> ())
-
 let rec really_read fd string off n =
   if n=0 then () else
     let m = Unix.read fd string off n in

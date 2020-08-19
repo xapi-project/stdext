@@ -104,7 +104,6 @@ val kill_and_wait : ?signal:int -> ?timeout:float -> int -> unit
  *  a string suitable for logging. *)
 val string_of_signal : int -> string
 
-val proxy : Unix.file_descr -> Unix.file_descr -> unit
 val really_read : Unix.file_descr -> bytes -> int -> int -> unit
 val really_read_string : Unix.file_descr -> int -> string
 
