@@ -115,9 +115,23 @@ val really_write : Unix.file_descr -> string -> int -> int -> unit
 val really_write_string : Unix.file_descr -> string -> unit
 val try_read_string : ?limit: int -> Unix.file_descr -> string
 exception Timeout
+
+(** [time_limited_write fd length buf timeout] writes [length] bytes
+from [buf] to [fd] but raises [Timeout] if this takes more than
+[timeout] seconds. When this happens, part of the data may have been
+written to [fd] already and there is no information about which part.*)
 val time_limited_write : Unix.file_descr -> int -> bytes -> float -> unit
+
+(** [time_limited_write_substring] is like [time_limited_write] except
+that the data source is a [string] value *)
 val time_limited_write_substring : Unix.file_descr -> int -> string -> float -> unit
+
+(** [time_limited_read fd length timeout] reads [length] bytes from file
+descriptor [fd] and returns them as a string. It raises [Timeout] if this
+can't be done within [timeout] seconds. This can lead to bytes being
+read from [fd] that are lost because the timeout was hit. *)
 val time_limited_read : Unix.file_descr -> int -> float -> string
+
 val read_data_in_string_chunks : (string -> int -> unit) -> ?block_size:int -> ?max_bytes:int -> Unix.file_descr -> int
 val read_data_in_chunks : (bytes -> int -> unit) -> ?block_size:int -> ?max_bytes:int -> Unix.file_descr -> int
 val spawnvp :
