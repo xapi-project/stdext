@@ -12,6 +12,7 @@ depends: [
   "ocaml"
   "dune" {build}
   "base-unix"
+  "polly"
   "fd-send-recv" {>= "2.0.0"}
   "xapi-stdext-pervasives"
   "xapi-stdext-std"

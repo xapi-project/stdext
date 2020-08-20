@@ -446,52 +446,74 @@ let really_write_string fd string =
 
 exception Timeout
 
-(* Write as many bytes to a file descriptor as possible from data before a given clock time. *)
-(* Raises Timeout exception if the number of bytes written is less than the specified length. *)
-(* Writes into the file descriptor at the current cursor position. *)
-let time_limited_write_internal (write : Unix.file_descr -> 'a -> int -> int -> int) filedesc length data target_response_time =
-  let total_bytes_to_write = length in
-  let bytes_written = ref 0 in
-  let now = ref (Unix.gettimeofday()) in
-  while !bytes_written < total_bytes_to_write && !now < target_response_time do
-    let remaining_time = target_response_time -. !now in
-    let (_, ready_to_write, _) = Unix.select [] [filedesc] [] remaining_time in (* Note: there is a possibility that the storage could go away after the select and before the write, so the write would block. *)
-    if List.mem filedesc ready_to_write then begin
-      let bytes_to_write = total_bytes_to_write - !bytes_written in
-      let bytes = (try write filedesc data !bytes_written bytes_to_write with Unix.Unix_error(Unix.EAGAIN,_,_) | Unix.Unix_error(Unix.EWOULDBLOCK,_,_) -> 0) in (* write from buffer=data from offset=bytes_written, length=bytes_to_write *)
-      bytes_written := bytes + !bytes_written;
-    end;
-    now := Unix.gettimeofday()
-  done;
-  if !bytes_written = total_bytes_to_write then () else (* we ran out of time *) raise Timeout
+let defer f g = Fun.protect ~finally:f g
+
+let write_with_timeout write fd length bytes timeout =
+  let deadline = Unix.gettimeofday () +. timeout in
+  let written = ref 0 in
+  let epoll = Polly.create () in
+  defer (fun () -> Polly.close epoll) @@ fun () ->
+  let () = Polly.add epoll fd Polly.Events.out in
+  let process _epoll fd _events =
+    try
+      let remaining = length - !written in
+      written := !written + write fd bytes !written remaining
+    with
+    | Unix.(Unix_error (EAGAIN, _, _)) | Unix.(Unix_error (EWOULDBLOCK, _, _))
+    ->
+      ()
+  in
+  let rec loop () =
+    let now = Unix.gettimeofday () in
+    if !written >= length then ()
+    else if now >= deadline then raise Timeout
+    else
+      let miliseconds = (deadline -. now) *. 1000.0 |> int_of_float in
+      ignore @@ Polly.wait epoll 1 miliseconds process;
+      loop ()
+  in
+  loop ()
 
 let time_limited_write filedesc length data target_response_time =
-  time_limited_write_internal Unix.write filedesc length data target_response_time
+  write_with_timeout Unix.write filedesc length data target_response_time
 
 let time_limited_write_substring filedesc length data target_response_time =
-  time_limited_write_internal Unix.write_substring filedesc length data target_response_time
+  write_with_timeout Unix.write_substring filedesc length data target_response_time
 
+let read_with_timeout fd length timeout =
+  let deadline = Unix.gettimeofday () +. timeout in
+  let read = ref 0 in
+  let buf = Bytes.make length '\000' in
+  let epoll = Polly.create () in
+  defer (fun () -> Polly.close epoll) @@ fun () ->
+  let () = Polly.add epoll fd Polly.Events.inp in
+  let process _epoll fd _events =
+    try
+      let remaining = length - !read in
+      read :=
+        !read
+        +
+        match Unix.read fd buf !read remaining with
+        | 0 -> raise End_of_file
+        | n -> n
+    with
+    | Unix.(Unix_error (EAGAIN, _, _)) | Unix.(Unix_error (EWOULDBLOCK, _, _))
+    ->
+      ()
+  in
+  let rec loop () =
+    let now = Unix.gettimeofday () in
+    if !read >= length then Bytes.unsafe_to_string buf
+    else if now >= deadline then raise Timeout
+    else
+      let miliseconds = (deadline -. now) *. 1000.0 |> int_of_float in
+      ignore @@ Polly.wait epoll 1 miliseconds process;
+      loop ()
+  in
+  loop ()
 
-(* Read as many bytes to a file descriptor as possible before a given clock time. *)
-(* Raises Timeout exception if the number of bytes read is less than the desired number. *)
-(* Reads from the file descriptor at the current cursor position. *)
-let time_limited_read filedesc length target_response_time =
-  let total_bytes_to_read = length in
-  let bytes_read = ref 0 in
-  let buf = Bytes.make total_bytes_to_read '\000' in
-  let now = ref (Unix.gettimeofday()) in
-  while !bytes_read < total_bytes_to_read && !now < target_response_time do
-    let remaining_time = target_response_time -. !now in
-    let (ready_to_read, _, _) = Unix.select [filedesc] [] [] remaining_time in
-    if List.mem filedesc ready_to_read then begin
-      let bytes_to_read = total_bytes_to_read - !bytes_read in
-      let bytes = (try Unix.read filedesc buf !bytes_read bytes_to_read with Unix.Unix_error(Unix.EAGAIN,_,_) | Unix.Unix_error(Unix.EWOULDBLOCK,_,_) -> 0) in (* read into buffer=buf from offset=bytes_read, length=bytes_to_read *)
-      if bytes = 0 then raise End_of_file (* End of file has been reached *)
-      else bytes_read := bytes + !bytes_read
-    end;
-    now := Unix.gettimeofday()
-  done;
-  if !bytes_read = total_bytes_to_read then (Bytes.unsafe_to_string buf) else (* we ran out of time *) raise Timeout
+let time_limited_read = read_with_timeout
+
 
 (* --------------------------------------------------------------------------------------- *)
 
