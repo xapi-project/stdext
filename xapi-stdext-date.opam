@@ -7,6 +7,7 @@ homepage: "https://xapi-project.github.io/"
 tags: [ "org:xapi-project" ]
 
 build:  [[ "dune" "build" "-p" name "-j" jobs ]]
+test:   [[ "dune" "runtest" "-p" name "-j" jobs ]] {with-test}
 
 depends: [
   "ocaml"
