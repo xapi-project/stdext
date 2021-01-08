@@ -9,6 +9,14 @@ let () = Printf.ksprintf Jbuild_plugin.V1.send {|
 (library
   (name xapi_stdext_encodings)
   (public_name xapi-stdext-encodings)
+  (modules encodings)
   %s
+)
+
+(test
+  (name test)
+  (package xapi-stdext-encodings)
+  (modules test)
+  (libraries alcotest xapi-stdext-encodings)
 )
 |} coverage_rewriter
