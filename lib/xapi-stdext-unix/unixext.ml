@@ -123,6 +123,17 @@ let file_lines_iter f = file_lines_fold (fun () line -> ignore (f line)) ()
 
 let readfile_line = file_lines_iter
 
+let read_file ~max_bytes ~path =
+  with_input_channel path @@ fun ic ->
+  let bytes = in_channel_length ic in
+  if bytes > max_bytes then
+    raise
+      (Invalid_argument
+         (Printf.sprintf {|File "%s" exceed maximum size of %i bytes|} path
+            max_bytes))
+  else
+    really_input_string ic bytes
+
 (** [fd_blocks_fold block_size f start fd] folds [f] over blocks (strings)
     from the fd [fd] with initial value [start] *)
 let fd_blocks_fold block_size f start fd =

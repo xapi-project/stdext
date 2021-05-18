@@ -54,6 +54,10 @@ val file_lines_fold : ('a -> string -> 'a) -> 'a -> string -> 'a
 val read_lines : path:string -> string list
 (** [read_lines path] returns a list of lines in the file at [path]. *)
 
+val read_file : max_bytes:int -> path:string -> string
+(** [read_file ~max_bytes ~path] returns the contents of the file at [path] or
+    fails if the contents are larger than [max_bytes] *)
+
 val file_lines_iter : (string -> unit) -> string -> unit
 (** Applies function [f] to every line in the file at [file_path]. *)
 
