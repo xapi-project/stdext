@@ -148,14 +148,17 @@ module List : sig
   val between_tr : 'a -> 'a list -> 'a list
   (** Tail-recursive {!between}. *)
 
-  val randomize : 'a list -> 'a list [@@deprecated "Not used"]
+  val randomize : 'a list -> 'a list
+    [@@deprecated "Not used"]
   (** Generate a random permutation of the given list. *)
 
-  val distribute : 'a -> 'a list -> 'a list list [@@deprecated "Not used"]
+  val distribute : 'a -> 'a list -> 'a list list
+    [@@deprecated "Not used"]
   (** Distribute the given element over the given list, returning a list of
       lists with the new element in each position. *)
 
-  val permute : 'a list -> 'a list list [@@deprecated "Not used"]
+  val permute : 'a list -> 'a list list
+    [@@deprecated "Not used"]
   (** Generate all permutations of the given list. *)
 
   val inner :
@@ -187,5 +190,4 @@ module List : sig
 
   val intersect : 'a list -> 'a list -> 'a list
   (** Returns the intersection of two lists. *)
-
 end

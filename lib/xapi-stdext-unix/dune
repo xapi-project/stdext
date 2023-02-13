@@ -2,6 +2,7 @@
   (name xapi_stdext_unix)
   (public_name xapi-stdext-unix)
   (libraries
+    polly
     fd-send-recv
     unix
     xapi-stdext-pervasives)

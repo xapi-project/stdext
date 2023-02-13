@@ -9,6 +9,7 @@ homepage: "https://github.com/xapi-project/stdext"
 bug-reports: "https://github.com/xapi-project/stdext/issues"
 depends: [
   "dune" {>= "2.7"}
+  "polly" {= version}
   "xapi-stdext-date" {= version}
   "xapi-stdext-encodings" {= version}
   "xapi-stdext-pervasives" {= version}

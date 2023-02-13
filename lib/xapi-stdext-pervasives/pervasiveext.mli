@@ -53,5 +53,6 @@ val ignore_bool : bool -> unit
 
 val ( ++ ) : ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
   [@@ocaml.deprecated "Not a standard idiom. Define it locally if needed."]
+
 val ( $ ) : ('a -> 'b) -> 'a -> 'b
   [@@ocaml.deprecated "Not right-associative. Replace with @@"]
