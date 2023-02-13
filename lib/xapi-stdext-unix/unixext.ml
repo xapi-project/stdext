@@ -361,7 +361,7 @@ let kill_and_wait ?(signal = Sys.sigterm) ?(timeout = 10.) pid =
       let cmdline = readcmdline pid in
       if cmdline = reference then (
         (* still up, let's sleep a bit *)
-        ignore (Unix.select [] [] [] loop_time_waiting) ;
+        Thread.delay loop_time_waiting ;
         left := !left -. loop_time_waiting
       ) else (* not the same, it's gone ! *)
         quit := true
@@ -419,19 +419,30 @@ let proxy (a : Unix.file_descr) (b : Unix.file_descr) =
       in
       (* If we can't make any progress (because fds have been closed), then stop *)
       if r = [] && w = [] then raise End_of_file ;
-      let r, w, _ = Unix.select r w [] (-1.0) in
-      (* Do the writing before the reading *)
-      List.iter
-        (fun fd -> if a = fd then CBuf.write b' a else CBuf.write a' b)
-        w ;
-      List.iter (fun fd -> if a = fd then CBuf.read a' a else CBuf.read b' b) r ;
-      (* If there's nothing else to read or write then signal the other end *)
-      List.iter
-        (fun (buf, fd) ->
-          if CBuf.end_of_reads buf then Unix.shutdown fd Unix.SHUTDOWN_SEND ;
-          if CBuf.end_of_writes buf then Unix.shutdown fd Unix.SHUTDOWN_RECEIVE
+      let epoll = Polly.create () in
+      List.iter (fun fd -> Polly.add epoll fd Polly.Events.inp) r ;
+      List.iter (fun fd -> Polly.add epoll fd Polly.Events.out) w ;
+      Fun.protect
+        ~finally:(fun () -> Polly.close epoll)
+        (fun () ->
+          ignore
+          @@ Polly.wait epoll 4 (-1) (fun _ file_desc event ->
+                 (* Do the writing before the reading *)
+                 if event = Polly.Events.out then
+                   if a = file_desc then CBuf.write b' a else CBuf.write a' b ;
+                 if event = Polly.Events.inp then
+                   if a = file_desc then CBuf.read a' a else CBuf.read b' b ;
+                 (* If there's nothing else to read or write then signal the other end *)
+                 List.iter
+                   (fun (buf, fd) ->
+                     if CBuf.end_of_reads buf then
+                       Unix.shutdown fd Unix.SHUTDOWN_SEND ;
+                     if CBuf.end_of_writes buf then
+                       Unix.shutdown fd Unix.SHUTDOWN_RECEIVE
+                   )
+                   [(a', b); (b', a)]
+             )
         )
-        [(a', b); (b', a)]
     done
   with _ -> (
     (try Unix.clear_nonblock a with _ -> ()) ;
@@ -517,21 +528,32 @@ let time_limited_write_internal
   let now = ref (Unix.gettimeofday ()) in
   while !bytes_written < total_bytes_to_write && !now < target_response_time do
     let remaining_time = target_response_time -. !now in
-    let _, ready_to_write, _ = Unix.select [] [filedesc] [] remaining_time in
-    (* Note: there is a possibility that the storage could go away after the select and before the write, so the write would block. *)
-    ( if List.mem filedesc ready_to_write then
-        let bytes_to_write = total_bytes_to_write - !bytes_written in
-        let bytes =
-          try write filedesc data !bytes_written bytes_to_write
-          with
-          | Unix.Unix_error (Unix.EAGAIN, _, _)
-          | Unix.Unix_error (Unix.EWOULDBLOCK, _, _)
-          ->
-            0
+    let epoll = Polly.create () in
+    Polly.add epoll filedesc Polly.Events.out ;
+    Fun.protect
+      ~finally:(fun () -> Polly.close epoll)
+      (fun () ->
+        let (_ : int) =
+          Polly.wait epoll 1
+            (int_of_float (remaining_time *. 1000.))
+            (fun _ fd _ ->
+              (* Note: there is a possibility that the storage could go away after the epoll and before the write, so the write would block. *)
+              if fd = filedesc then
+                let bytes_to_write = total_bytes_to_write - !bytes_written in
+                let bytes =
+                  try write filedesc data !bytes_written bytes_to_write
+                  with
+                  | Unix.Unix_error (Unix.EAGAIN, _, _)
+                  | Unix.Unix_error (Unix.EWOULDBLOCK, _, _)
+                  ->
+                    0
+                in
+                (* write from buffer=data from offset=bytes_written, length=bytes_to_write *)
+                bytes_written := bytes + !bytes_written
+            )
         in
-        (* write from buffer=data from offset=bytes_written, length=bytes_to_write *)
-        bytes_written := bytes + !bytes_written
-    ) ;
+        ()
+      ) ;
     now := Unix.gettimeofday ()
   done ;
   if !bytes_written = total_bytes_to_write then
@@ -557,23 +579,34 @@ let time_limited_read filedesc length target_response_time =
   let now = ref (Unix.gettimeofday ()) in
   while !bytes_read < total_bytes_to_read && !now < target_response_time do
     let remaining_time = target_response_time -. !now in
-    let ready_to_read, _, _ = Unix.select [filedesc] [] [] remaining_time in
-    ( if List.mem filedesc ready_to_read then
-        let bytes_to_read = total_bytes_to_read - !bytes_read in
-        let bytes =
-          try Unix.read filedesc buf !bytes_read bytes_to_read
-          with
-          | Unix.Unix_error (Unix.EAGAIN, _, _)
-          | Unix.Unix_error (Unix.EWOULDBLOCK, _, _)
-          ->
-            0
+    let epoll = Polly.create () in
+    Polly.add epoll filedesc Polly.Events.inp ;
+    Fun.protect
+      ~finally:(fun () -> Polly.close epoll)
+      (fun () ->
+        let (_ : int) =
+          Polly.wait epoll 1
+            (int_of_float (remaining_time *. 1000.))
+            (fun _ fd _ ->
+              if fd = filedesc then
+                let bytes_to_read = total_bytes_to_read - !bytes_read in
+                let bytes =
+                  try Unix.read filedesc buf !bytes_read bytes_to_read
+                  with
+                  | Unix.Unix_error (Unix.EAGAIN, _, _)
+                  | Unix.Unix_error (Unix.EWOULDBLOCK, _, _)
+                  ->
+                    0
+                in
+                (* read into buffer=buf from offset=bytes_read, length=bytes_to_read *)
+                if bytes = 0 then
+                  raise End_of_file (* End of file has been reached *)
+                else
+                  bytes_read := bytes + !bytes_read
+            )
         in
-        (* read into buffer=buf from offset=bytes_read, length=bytes_to_read *)
-        if bytes = 0 then
-          raise End_of_file (* End of file has been reached *)
-        else
-          bytes_read := bytes + !bytes_read
-    ) ;
+        ()
+      ) ;
     now := Unix.gettimeofday ()
   done ;
   if !bytes_read = total_bytes_to_read then

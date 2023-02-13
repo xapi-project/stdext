@@ -86,11 +86,22 @@ module Delay = struct
                 pipe_out
             )
           in
-          let r, _, _ = Unix.select [pipe_out] [] [] seconds in
-          (* flush the single byte from the pipe *)
-          if r <> [] then ignore (Unix.read pipe_out (Bytes.create 1) 0 1) ;
+          let epoll = Polly.create () in
+          Polly.add epoll pipe_out Polly.Events.inp ;
+          let num_fds =
+            Fun.protect
+              ~finally:(fun () -> Polly.close epoll)
+              (fun () ->
+                Polly.wait epoll 1
+                  (int_of_float (seconds *. 1000.))
+                  (fun _ fd _ ->
+                    (* flush the single byte from the pipe *)
+                    ignore (Unix.read fd (Bytes.create 1) 0 1)
+                  )
+              )
+          in
           (* return true if we waited the full length of time, false if we were woken *)
-          r = []
+          num_fds = 0
         with Pre_signalled -> false
       )
       (fun () ->
