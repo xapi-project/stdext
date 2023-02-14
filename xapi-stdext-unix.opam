@@ -8,6 +8,7 @@ homepage: "https://github.com/xapi-project/stdext"
 bug-reports: "https://github.com/xapi-project/stdext/issues"
 depends: [
   "dune" {>= "2.7"}
+  "polly"
   "ocaml"
   "base-unix"
   "fd-send-recv" {>= "2.0.0"}
