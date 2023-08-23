@@ -183,7 +183,7 @@ CAMLprim value stub_fdset_is_set_and_clear(value set, value fd)
 
 void unixext_error(int code)
 {
-	static value *exn = NULL;
+	static const value *exn = NULL;
 
 	if (!exn) {
 		exn = caml_named_value("unixext.unix_error");
