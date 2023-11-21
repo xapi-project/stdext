@@ -93,6 +93,7 @@
     (fd-send-recv (>= 2.0.0))
     (odoc :with-doc)
     (xapi-stdext-pervasives (= :version))
+    polly
   )
 )
 

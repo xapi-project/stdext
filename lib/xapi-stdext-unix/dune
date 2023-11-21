@@ -3,6 +3,7 @@
   (public_name xapi-stdext-unix)
   (libraries
     fd-send-recv
+    polly
     unix
     xapi-stdext-pervasives)
   (foreign_stubs

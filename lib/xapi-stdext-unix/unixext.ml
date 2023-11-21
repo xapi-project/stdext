@@ -528,32 +528,60 @@ let really_write_string fd string =
 
 exception Timeout
 
+let to_milliseconds ms = ms *. 1000. |> int_of_float
+
+(* Allocating a new polly and waiting like this results in at least 3 syscalls.
+   An alternative for sockets would be to use [setsockopt],
+   but that would need 3 system calls too:
+
+   [fstat] to check that it is not a pipe
+    (you'd risk getting stuck forever without [select/poll/epoll] there)
+   [setsockopt_float] to set the timeout
+   [clear_nonblock] to ensure the socket is non-blocking
+*)
+let with_polly kind fd f =
+  let polly = Polly.create () in
+  let finally () = Polly.close polly in
+  Xapi_stdext_pervasives.Pervasiveext.finally
+    (fun () ->
+      Polly.add polly fd kind ;
+      let wait remaining_time =
+        if remaining_time < 0. then raise Timeout ;
+        (* allow a timeout of 0 to check for current state without waiting *)
+        let ready =
+          Polly.wait polly 1 (to_milliseconds remaining_time)
+          @@ fun _ event_on_fd _ -> assert (event_on_fd == fd)
+        in
+        if ready = 0 then raise Timeout
+      in
+      f wait fd
+    )
+    finally
+
 (* Write as many bytes to a file descriptor as possible from data before a given clock time. *)
 (* Raises Timeout exception if the number of bytes written is less than the specified length. *)
 (* Writes into the file descriptor at the current cursor position. *)
 let time_limited_write_internal
     (write : Unix.file_descr -> 'a -> int -> int -> int) filedesc length data
     target_response_time =
+  with_polly Polly.Events.out filedesc @@ fun wait filedesc ->
   let total_bytes_to_write = length in
   let bytes_written = ref 0 in
   let now = ref (Unix.gettimeofday ()) in
   while !bytes_written < total_bytes_to_write && !now < target_response_time do
     let remaining_time = target_response_time -. !now in
-    let _, ready_to_write, _ = Unix.select [] [filedesc] [] remaining_time in
-    (* Note: there is a possibility that the storage could go away after the select and before the write, so the write would block. *)
-    ( if List.mem filedesc ready_to_write then
-        let bytes_to_write = total_bytes_to_write - !bytes_written in
-        let bytes =
-          try write filedesc data !bytes_written bytes_to_write
-          with
-          | Unix.Unix_error (Unix.EAGAIN, _, _)
-          | Unix.Unix_error (Unix.EWOULDBLOCK, _, _)
-          ->
-            0
-        in
-        (* write from buffer=data from offset=bytes_written, length=bytes_to_write *)
-        bytes_written := bytes + !bytes_written
-    ) ;
+    wait remaining_time ;
+    let bytes_to_write = total_bytes_to_write - !bytes_written in
+    let bytes =
+      try write filedesc data !bytes_written bytes_to_write
+      with
+      | Unix.Unix_error (Unix.EAGAIN, _, _)
+      | Unix.Unix_error (Unix.EWOULDBLOCK, _, _)
+      ->
+        0
+    in
+    (* write from buffer=data from offset=bytes_written, length=bytes_to_write *)
+    bytes_written := bytes + !bytes_written ;
     now := Unix.gettimeofday ()
   done ;
   if !bytes_written = total_bytes_to_write then
@@ -573,29 +601,28 @@ let time_limited_write_substring filedesc length data target_response_time =
 (* Raises Timeout exception if the number of bytes read is less than the desired number. *)
 (* Reads from the file descriptor at the current cursor position. *)
 let time_limited_read filedesc length target_response_time =
+  with_polly Polly.Events.inp filedesc @@ fun wait filedesc ->
   let total_bytes_to_read = length in
   let bytes_read = ref 0 in
   let buf = Bytes.make total_bytes_to_read '\000' in
   let now = ref (Unix.gettimeofday ()) in
   while !bytes_read < total_bytes_to_read && !now < target_response_time do
     let remaining_time = target_response_time -. !now in
-    let ready_to_read, _, _ = Unix.select [filedesc] [] [] remaining_time in
-    ( if List.mem filedesc ready_to_read then
-        let bytes_to_read = total_bytes_to_read - !bytes_read in
-        let bytes =
-          try Unix.read filedesc buf !bytes_read bytes_to_read
-          with
-          | Unix.Unix_error (Unix.EAGAIN, _, _)
-          | Unix.Unix_error (Unix.EWOULDBLOCK, _, _)
-          ->
-            0
-        in
-        (* read into buffer=buf from offset=bytes_read, length=bytes_to_read *)
-        if bytes = 0 then
-          raise End_of_file (* End of file has been reached *)
-        else
-          bytes_read := bytes + !bytes_read
-    ) ;
+    wait remaining_time ;
+    let bytes_to_read = total_bytes_to_read - !bytes_read in
+    let bytes =
+      try Unix.read filedesc buf !bytes_read bytes_to_read
+      with
+      | Unix.Unix_error (Unix.EAGAIN, _, _)
+      | Unix.Unix_error (Unix.EWOULDBLOCK, _, _)
+      ->
+        0
+    in
+    (* read into buffer=buf from offset=bytes_read, length=bytes_to_read *)
+    if bytes = 0 then
+      raise End_of_file (* End of file has been reached *)
+    else
+      bytes_read := bytes + !bytes_read ;
     now := Unix.gettimeofday ()
   done ;
   if !bytes_read = total_bytes_to_read then

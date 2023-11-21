@@ -13,6 +13,7 @@ depends: [
   "fd-send-recv" {>= "2.0.0"}
   "odoc" {with-doc}
   "xapi-stdext-pervasives" {= version}
+  "polly"
 ]
 build: [
   ["dune" "subst"] {dev}
@@ -30,4 +31,4 @@ build: [
 ]
 dev-repo: "git+https://github.com/xapi-project/stdext.git"
 depexts: ["linux-headers"] {os-distribution = "alpine"}
-available: [ os = "macos" | os = "linux" ]
+available: [ os = "linux" ]
