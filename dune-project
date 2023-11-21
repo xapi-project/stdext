@@ -81,6 +81,7 @@
     (odoc :with-doc)
     (xapi-stdext-pervasives (= :version))
     (mtime :with-test)
+    (xapi-stdext-unix (= :version))
   )
 )
 
