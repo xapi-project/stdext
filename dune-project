@@ -2,6 +2,7 @@
 (formatting (enabled_for ocaml))
 (name xapi-stdext)
 
+(implicit_transitive_deps false)
 (generate_opam_files true)
 
 (source (github xapi-project/stdext))
