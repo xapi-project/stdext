@@ -1,9 +1,14 @@
 PROFILE=release
 
-.PHONY: build install uninstall clean test doc format
+.PHONY: build install uninstall clean test doc format coverage
 
 build:
 	dune build @install --profile=$(PROFILE)
+
+coverage:
+	dune runtest --instrument-with bisect_ppx --force
+	bisect-ppx-report html
+	bisect-ppx-report summary --per-file
 
 install:
 	dune install

@@ -11,6 +11,7 @@ depends: [
   "alcotest" {with-test}
   "base-unix"
   "fmt"
+  "bisect_ppx" {build}
   "odoc" {with-doc}
 ]
 build: [
