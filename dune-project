@@ -2,6 +2,7 @@
 (formatting (enabled_for ocaml))
 (name xapi-stdext)
 
+(cram enable)
 (implicit_transitive_deps false)
 (generate_opam_files true)
 
