@@ -116,7 +116,7 @@
     (alcotest :with-test)
     base-unix
     fmt
-    (bisect_ppx :build)
+    (bisect_ppx :with-test)
   )
 )
 
