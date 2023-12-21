@@ -59,8 +59,7 @@ let to_unix_kind =
   | #sock ->
       S_SOCK
 
-let pp_kind fmt =
-  Fmt.using to_unix_kind Safefd.pp_kind fmt
+let pp_kind fmt = Fmt.using to_unix_kind Safefd.pp_kind fmt
 
 let pp fmt =
   Fmt.(

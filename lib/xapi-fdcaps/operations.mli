@@ -18,6 +18,8 @@
 
 open Properties
 
+(** {1 Type and pretty printers } *)
+
 (** a file descriptor with properties
   Upper bounds are avoided here so that this type can be used in functors
  *)
@@ -35,10 +37,15 @@ val pp : _ t Fmt.t
 val dump : _ t Fmt.t
 (** [dump formatter t] prints a debug representation of [t] on [formatter]. *)
 
-val close : _ t -> unit
-(** [close t] closes t. Doesn't raise an exception if it is already closed.
-  Other errors from the underlying {!val:Unix.close} are propagated.
+(** {1 Initialization} *)
+
+val setup : unit -> unit
+(** [setup ()] installs a SIGPIPE handler.
+
+  By default a SIGPIPE would kill the program, this makes it return [EPIPE] instead.
  *)
+
+(** {1 With resource wrappers} *)
 
 val with_fd : 'a t -> ('a t -> 'b) -> 'b
 (** [with_fd t f] calls [f t] and always closes [t] after [f] finishes.
@@ -52,6 +59,13 @@ module Syntax : sig
   val ( let@ ) : ('a -> 'b) -> 'a -> 'b
   (** [let@ fd = with_fd t in ... use fd] *)
 end
+
+(** {1 {!mod:Unix} wrappers} *)
+
+val close : _ t -> unit
+(** [close t] closes t. Doesn't raise an exception if it is already closed.
+  Other errors from the underlying {!val:Unix.close} are propagated.
+ *)
 
 val pipe : unit -> ([> rdonly], [> fifo]) make * ([> wronly], [> fifo]) make
 (** [pipe ()] creates an unnamed pipe.
@@ -177,6 +191,8 @@ val clear_nonblock : _ t -> unit
   @see {!Unix.clear_nonblock}
  *)
 
+(** {1 Temporary files} *)
+
 val with_tempfile :
   ?size:int64 -> unit -> (string * ([> wronly], [> reg]) make -> 'a) -> 'a
 (** [with_tempfile () f] calls [f (name, outfd)] with the name of a temporary file and a file descriptor opened for writing.
@@ -199,9 +215,6 @@ val with_temp_blk :
   @param delay_read_ms delays read operations by specified milliseconds
   @param delay_write_ms delays write operations by specified milliseconds
 *)
-
-val setup : unit -> unit
-(** [setup ()] installs a SIGPIPE handler *)
 
 (**/**)
 
