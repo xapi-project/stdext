@@ -6,5 +6,4 @@
 
 (cram
 	(deps (package xapi-fdcaps))
-	(enabled_if (= %{ocaml_version} 4.14.1))
 )
