@@ -173,8 +173,7 @@ let check_output cmd args =
   | _ ->
       failwith (Printf.sprintf "%s exited nonzero" cmd)
 
-let with_temp_blk ?(sector_size = 512) ?delay_read_ms:_ ?delay_write_ms:_ name f
-    =
+let with_temp_blk ?(sector_size = 512) name f =
   let blkdev =
     check_output "losetup"
       [

@@ -199,21 +199,14 @@ val with_tempfile :
   Deletes the temporary file when [f] finishes. *)
 
 val with_temp_blk :
-     ?sector_size:int
-  -> ?delay_read_ms:float
-  -> ?delay_write_ms:float
-  -> string
-  -> (string * ([> rdwr], [> blk]) make -> 'a)
-  -> 'a
-(** [with_temp_blk ?sector_size ?delay_read ?delay_write path f] calls [f (name, fd)] with a name and file descriptor pointing to a block device.
+  ?sector_size:int -> string -> (string * ([> rdwr], [> blk]) make -> 'a) -> 'a
+(** [with_temp_blk ?sector_size path f] calls [f (name, fd)] with a name and file descriptor pointing to a block device.
   The block device is temporarily created on top of [path].
 
   Deletes the block device when [f] finishes.
   Only works when run as root.
 
   @param sector_size between 512 and 4096
-  @param delay_read_ms delays read operations by specified milliseconds
-  @param delay_write_ms delays write operations by specified milliseconds
 *)
 
 (**/**)
